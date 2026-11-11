@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fil">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1F7A33">
+<meta name="referrer" content="no-referrer">
+<title>eBallot - Representative</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main>
+<section id="home">
+  <img class="logo" src="logo.webp" alt="eBallot SACDECO">
+  <div class="card">
+    <p class="kicker">Halalan ng mga Representative</p>
+    <h1>Account Code</h1>
+    <p>Ilagay ang Account Code mo para i-verify kung eligible kang bumoto.</p>
+    <form id="vf" autocomplete="off" novalidate>
+      <input id="code" inputmode="numeric" placeholder="Account Code" maxlength="64" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-label="Account Code" required>
+      <div class="err" id="herr" role="alert"></div>
+      <button id="vb" type="submit">I-verify</button>
+    </form>
+    <p class="help">Kailangan ng tulong? Lumapit sa staff ng kooperatiba.</p>
+  </div>
+</section>
+<section id="result" hidden><div class="card white">
+  <div class="ic" id="ric">&#10005;</div><h1 id="rt"></h1><p id="rm"></p>
+  <div class="track" id="trk"></div><p id="rc"></p>
+  <button class="alt" id="rback" type="button">Bumalik sa home</button>
+</div></section>
+<section id="ballot" hidden>
+  <div class="top"><img src="logo.webp" alt=""><div><b id="bn"></b><span id="be"></span></div></div>
+  <div class="head">
+    <div class="srch">
+      <input id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="Pangalan o numero" aria-label="Hanapin ang kandidato sa pangalan o numero">
+      <button id="qc" type="button" aria-label="Burahin ang hinahanap" hidden>&#10005;</button>
+    </div>
+    <button id="vpick" type="button" aria-pressed="false" aria-label="Ipakita lang ang mga napili"><span class="v1">Napili: <span id="pn">0</span></span><span class="v2">Ipakita lahat</span></button>
+  </div>
+  <div class="how" id="how">
+    <p><b>Paano bumoto:</b> Pindutin ang pangalan para pumili. Pindutin ulit para alisin ang tsek.</p>
+    <p>Hanapin ang pangalan o numero sa kahon sa itaas.</p>
+  </div>
+  <div id="groups"></div>
+  <div class="bar"><button id="rvb" type="button">Suriin ang boto</button></div>
+</section>
+<section id="receipt" hidden><div class="card white">
+  <div class="ic ok" aria-hidden="true"></div>
+  <h1>Naitala na ang boto mo</h1>
+  <p>I-save ang resibo sa phone bago umalis sa pahinang ito.</p>
+  <img id="rimg" alt="Resibo ng boto">
+  <p id="rcode"><span>Receipt code</span><b id="rcodev"></b></p>
+  <button id="sv" type="button">I-save sa phone</button>
+  <p id="rhelp">Hindi lumabas ang save? Mag-screenshot sa phone, o pindutin nang matagal ang larawan.</p>
+  <button class="alt" id="done" type="button">Tapos na</button>
+</div></section>
+</main>
+<dialog id="dlg" aria-labelledby="dlgt">
+  <h2 id="dlgt">Tingnan muna ang boto mo</h2>
+  <div class="rv" id="rv"></div>
+  <p class="warn">Hindi na mababago ang boto kapag naisumite na.</p>
+  <div class="err" id="derr" role="alert"></div>
+  <div class="col"><button id="dyes" type="button">Isumite ang boto</button><button class="alt" id="dno" type="button">Bumalik at baguhin</button></div>
+</dialog>
+<div id="toast" role="status" hidden></div>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

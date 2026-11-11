@@ -1,0 +1,11 @@
+{
+  "name": "evoting-representative-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mobile voting page and API proxy for the SACDECO Representative election",
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "start": "node dev-server.mjs"
+  }
+}
