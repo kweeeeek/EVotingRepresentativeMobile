@@ -21,7 +21,7 @@
   L.searchText = s => L.oneLine(s, 100);
   L.searchable = q => (/^\d+$/.test(q) ? q.length >= 1 : q.length >= 2);
 
-  /** The Account Code as typed: spaces, dots and dashes that a member copies from a card ("0030 0000 012773") are dropped when it is made of digits. */
+  /** The Account Code as typed: spaces, dots and dashes that a member copies from a card ("1111 2222 333344") are dropped when it is made of digits. */
   L.cleanAccountCode = s => {
     const t = L.oneLine(s, 64);
     return /^[\d\s.\-]+$/.test(t) ? t.replace(/[\s.\-]+/g, '') : t.replace(/\s+/g, '');
@@ -184,9 +184,9 @@
    * "fix" (stay on the review and show msg) or "screen" (the voting is over for this voter: title and msg, then back to the start).
    */
   L.describeSubmitError = e => {
-    if (e.net) return { action: 'retry', msg: 'Walang koneksyon. Pindutin ulit ang “Isumite ang boto” - ligtas ito at hindi mabibilang nang dalawang beses.' };
-    if (e.code === 'TEMPORARY_FAILURE') return { action: 'retry', msg: 'Abala ang server at walang naitala. Pindutin ulit ang “Isumite ang boto”.' };
-    if (L.isTransient(e)) return { action: 'retry', msg: 'Hindi pa tiyak kung naitala. Pindutin ulit ang “Isumite ang boto” - ligtas ito at hindi mabibilang nang dalawang beses.' };
+    if (e.net) return { action: 'retry', msg: 'Walang koneksyon. Pindutin ulit ang “Isumite” - ligtas ito at hindi mabibilang nang dalawang beses.' };
+    if (e.code === 'TEMPORARY_FAILURE') return { action: 'retry', msg: 'Abala ang server at walang naitala. Pindutin ulit ang “Isumite”.' };
+    if (L.isTransient(e)) return { action: 'retry', msg: 'Hindi pa tiyak kung naitala. Pindutin ulit ang “Isumite” - ligtas ito at hindi mabibilang nang dalawang beses.' };
     if (e.status === 401 || e.code === 'INVALID_TOKEN') return { action: 'reverify' };
     if (e.code === 'RECEIPT_IN_USE') return { action: 'newreceipt' };
     if (e.code === 'OUTSIDE_VOTING_WINDOW') {
