@@ -1,7 +1,7 @@
 # eBallot SACDECO – Representative election, mobile voting
 
 The phone page where members vote in the **Representative election**, plus the small Cloudflare Worker that sits between the page and the eVoting API.
-It looks like the General Assembly mobile page (same colours, font, logo and wording style) – only the voting process is different.
+It looks the same as the General Assembly mobile page (EVotingFrontend): same colours, **Inter** font, 14 px text, cards, buttons, logo, the "Bago ka bumoto" instructions screen and wording style – only the voting process is different.
 
 ```
 phone browser  ──►  Cloudflare Worker (this project)  ──►  eVoting API  (api.eballotsacdeco.site)
@@ -11,23 +11,34 @@ phone browser  ──►  Cloudflare Worker (this project)  ──►  eVoting A
 
 ## What the voter does
 
-1. **Account Code** – a number keypad opens; spaces or dashes typed in the code are ignored. The API checks that the member may vote.
-2. **Ballot** – one box per position, with its rule ("Pumili ng 1 hanggang 3", "Hanggang 1 ang pwedeng piliin") and a counter (2/3).
-   Tap a name to tick it, tap again to untick. A box above the list finds a candidate by **name or ballot number**.
+1. **Account Code** – type it (a number keypad opens; spaces or dashes typed in the code are ignored) **or tap "I-scan ang QR code"** and point the phone at the QR code printed by the Registration desk. The API checks that the member may vote.
+2. **Instructions** – "Bago ka bumoto": six short steps and a box to tick ("Nabasa at naintindihan ko ang mga tagubilin") before "Magpatuloy sa balota". The first names of the ballot are loaded in the background meanwhile.
+3. **Ballot** – one box per position, with its rule ("Pumili ng 1 hanggang 3", "Hanggang 1 ang pwedeng piliin") and a counter (2/3).
+   Tap a name to choose it, tap again to remove it. A box above the list finds a candidate by **name or ballot number**.
    "Tingnan ang detalye" shows what the candidate wrote about themselves. "Napili: n" shows only the chosen ones.
-3. **Review** – "Tingnan muna ang boto mo": every chosen name and number, then "Isumite ang boto".
-4. **Receipt** – a picture of the receipt with its code, to save or share (or take a screenshot).
+4. **Review** – "Kumpirmahin ang boto": every chosen name and number, then "Bumalik" or "Isumite".
+5. **Receipt** – a picture of the receipt with its code, to save or share (or take a screenshot).
 
 ## Made for senior citizens
 
 Most voters are older members who are not used to apps, so:
 
-- Large text (nothing under 16 px), large buttons (44–60 px tall), words instead of small icons, a tick mark (not only a colour) on chosen names.
-- A short "Paano bumoto" help at the top of the ballot; the review button says exactly what is still missing ("Kulang pa ang napili sa Delegate").
+- The same type sizes as the General Assembly page (14 px text, 15 px fields, nothing under 12 px). Every button and field is at least 44 px tall (the small "Tingnan ang detalye" links 34 px), words instead of small icons, and a chosen name is shown by a filled dot, a bold name and a tinted row (not only a colour). If the voters need bigger text, raise the sizes in `public/app.css` (`body{font:400 14px/1.5 …}` and the few `font-size` values below it); the layout follows.
+- The "Bago ka bumoto" instructions come before the ballot; the review button says exactly what is still missing ("Kulang pa ang napili sa Delegate").
 - Messages say what to do ("Alisin muna ang isa para makapili ng iba"), stay on screen for 15 seconds, and a "Bumalik sa home" button is always there.
-- "Isumite ang boto" wakes up 0.8 s after the review opens, so a double tap on "Suriin ang boto" can never send the vote.
+- "Isumite" wakes up 0.8 s after the review opens, so a double tap on "Suriin ang boto" can never send the vote.
 - The Back button and a page reload ask first when choices were made; a session that expires while the voter is thinking is renewed silently.
 - Works when the page is zoomed to 150–200% (no sideways scrolling), and the browser's own zoom is not blocked.
+
+## Scanning the Account Code (QR)
+
+The Registration desk prints a QR code that holds **only the member's Account Code** (upper case, nothing else). "I-scan ang QR code" opens the phone's camera in a window, reads that code, fills the Account Code field and verifies it – exactly as if the member had typed it.
+
+- It uses the phone's own QR reader (`BarcodeDetector`, Chrome on Android) when there is one, otherwise `jsqr.js` (a small library without dependencies, Apache-2.0, loaded only when needed). Nothing is uploaded: the camera picture stays on the phone and is dropped when the window closes.
+- A QR code that is not an Account Code (a web address, a sentence) is refused with a message and the camera keeps looking.
+- If the camera is not allowed or missing, or the page is opened inside an app's own browser, the window explains it and **"Kunan ng litrato ang QR"** opens the phone's camera app and reads the photo instead.
+- The camera works only on an `https://` page (Cloudflare's `workers.dev` and custom domains are) and the browser asks the member once to allow it. `public/_headers` allows the camera for this page only (`Permissions-Policy: camera=(self)`).
+- `public/scan.js` is **the same file** as in the General Assembly page (EVotingFrontend); keep the two copies identical.
 
 ## What is different in the voting process (compared with the General Assembly page)
 
@@ -42,9 +53,9 @@ Most voters are older members who are not used to apps, so:
 |---|---|
 | `worker.js` | the Cloudflare Worker: serves `public/` and relays only the five calls listed in the file header; keeps the kiosk token; caches roster pages and photos |
 | `wrangler.toml` | Worker name `eballotsacdecorepvotingapp`, static assets from `./public` |
-| `public/` | the page: `index.html`, `app.css`, `logic.js` (rules and wording, tested on its own), `app.js` (screens), `_headers` (security headers), logo, background, self-hosted font |
+| `public/` | the page: `index.html`, `app.css`, `logic.js` (rules and wording, tested on its own), `app.js` (screens), `scan.js` + `jsqr.js` (QR scanner, see above), `_headers` (security headers), logo, background, `fonts/` (Inter, SIL Open Font License, served from here) |
 | `dev-server.mjs` | runs the real `worker.js` and the page on your own computer, no Cloudflare needed |
-| `test/` | `worker.test.mjs`, `logic.test.mjs` |
+| `test/` | `worker.test.mjs`, `logic.test.mjs`, `scan.test.mjs` |
 
 ## Deploy (Cloudflare)
 
@@ -83,13 +94,13 @@ Open `http://localhost:8787`. It runs the same `worker.js` and applies `public/_
 npm test
 ```
 
-91 tests with Node's built-in runner (Node 22 or newer, nothing to install): the Worker (allow-list, tokens, cache, retries, error mapping, body limits) and the page logic (rules, ballot standing, receipt code, what to tell the voter for every API answer).
+98 tests with Node's built-in runner (Node 22 or newer, nothing to install): the Worker (allow-list, tokens, cache, retries, error mapping, body limits), the page logic (rules, ballot standing, receipt code, what to tell the voter for every API answer) and what the scanner accepts as an Account Code. (The camera, the screens and a whole vote were also tried in a real phone-size browser with a fake camera; that test needs Playwright and a test database, so it is not part of this repository.)
 
 ## Security
 
 - The kiosk secret exists only in the Worker. The browser holds the voter token in memory only (no cookies, no local storage) and drops it after the vote.
 - The Worker relays only the listed calls and checks their shape (ids, page size, token form, at most 500 choices, body up to 16 KB). Server errors (5xx) are replaced by a plain message without details.
-- Content security policy: scripts, styles, fonts and images only from the same address (`blob:` for the receipt and photos), no inline script or style, no framing. The font is served from here, not from Google.
+- Content security policy: scripts, styles, fonts and images only from the same address (`blob:` for the receipt and photos), no inline script or style, no framing. The font is served from here, not from Google. The camera is allowed for this page only (`Permissions-Policy`), and what it sees never leaves the phone.
 - Everything that comes from the server (names, details) is put on the page as text, never as HTML.
 - The receipt code is a random label made on the phone; it holds nothing about the voter or the choices. The API never sends the choices back.
 

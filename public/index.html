@@ -8,6 +8,7 @@
 <title>eBallot - Representative</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="favicon.png">
+<link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -19,9 +20,11 @@
     <h1>Account Code</h1>
     <p>Ilagay ang Account Code mo para i-verify kung eligible kang bumoto.</p>
     <form id="vf" autocomplete="off" novalidate>
-      <input id="code" inputmode="numeric" placeholder="Account Code" maxlength="64" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-label="Account Code" required>
+      <label class="lbl" for="code">Account Code</label>
+      <input id="code" inputmode="numeric" placeholder="00xxxxxxxxxx" maxlength="64" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" required>
       <div class="err" id="herr" role="alert"></div>
       <button id="vb" type="submit">I-verify</button>
+      <button class="alt" id="scanb" type="button"><svg class="qri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3h7v7H3zm2 2v3h3V5zM14 3h7v7h-7zm2 2v3h3V5zM3 14h7v7H3zm2 2v3h3v-3zM14 14h3v3h-3zm4 0h3v3h-3zm-4 4h3v3h-3zm4 3v-3h3v3z"/></svg>I-scan ang QR code</button>
     </form>
     <p class="help">Kailangan ng tulong? Lumapit sa staff ng kooperatiba.</p>
   </div>
@@ -31,6 +34,22 @@
   <div class="track" id="trk"></div><p id="rc"></p>
   <button class="alt" id="rback" type="button">Bumalik sa home</button>
 </div></section>
+<section id="guide" hidden><div class="card white">
+  <h1>Bago ka bumoto</h1>
+  <p>Basahin muna ang mga tagubilin sa ibaba.</p>
+  <div class="who"><i id="gi">?</i><div><b id="gn"></b><span id="ge"></span></div></div>
+  <ol class="steps" id="gs">
+    <li><b>Pumili sa bawat posisyon</b><span>Nakasulat sa itaas ng bawat posisyon kung ilan ang pwede mong piliin (hal. &ldquo;Pumili ng 1 hanggang 5&rdquo;).</span></li>
+    <li><b>Hanapin ang kandidato</b><span>Marami ang kandidato. I-type ang pangalan o numero sa kahon sa itaas, o mag-scroll pababa at pindutin ang &ldquo;Magpakita pa&rdquo;.</span></li>
+    <li><b>Pindutin ang pangalan ng kandidato</b><span>Para piliin siya. Pindutin ulit para alisin ang pili. Pindutin ang &ldquo;Tingnan ang detalye&rdquo; para mabasa ang tungkol sa kanya.</span></li>
+    <li><b>Tingnan ang bilang sa kanan</b><span>Ipinapakita rito kung ilan na ang napili mo (hal. 2/5). Magiging berde ito kapag sapat na ang pili mo. Pindutin ang &ldquo;Napili&rdquo; sa itaas para makita lang ang mga napili mo.</span></li>
+    <li><b>Suriin at isumite ang boto</b><span>Kapag kumpleto na ang lahat ng posisyon, pindutin ang &ldquo;Suriin ang boto&rdquo;, tapos &ldquo;Isumite&rdquo; kung sigurado ka na. Hindi na mababago ang boto pagkatapos isumite.</span></li>
+    <li><b>I-save ang resibo</b><span>Pagkatapos magsumite, i-save ang resibo sa phone mo bago umalis sa pahina.</span></li>
+  </ol>
+  <label class="ack"><input type="checkbox" id="gck"><span>Nabasa at naintindihan ko ang mga tagubilin.</span></label>
+  <button id="gb" type="button" disabled>Magpatuloy sa balota</button>
+  <button class="alt" id="gback" type="button">Bumalik</button>
+</div></section>
 <section id="ballot" hidden>
   <div class="top"><img src="logo.webp" alt=""><div><b id="bn"></b><span id="be"></span></div></div>
   <div class="head">
@@ -38,35 +57,40 @@
       <input id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="100" placeholder="Pangalan o numero" aria-label="Hanapin ang kandidato sa pangalan o numero">
       <button id="qc" type="button" aria-label="Burahin ang hinahanap" hidden>&#10005;</button>
     </div>
-    <button id="vpick" type="button" aria-pressed="false" aria-label="Ipakita lang ang mga napili"><span class="v1">Napili: <span id="pn">0</span></span><span class="v2">Ipakita lahat</span></button>
-  </div>
-  <div class="how" id="how">
-    <p><b>Paano bumoto:</b> Pindutin ang pangalan para pumili. Pindutin ulit para alisin ang tsek.</p>
-    <p>Hanapin ang pangalan o numero sa kahon sa itaas.</p>
+    <button class="alt" id="vpick" type="button" aria-pressed="false" aria-label="Ipakita lang ang mga napili"><span class="v1">Napili: <span id="pn">0</span></span><span class="v2">Ipakita lahat</span></button>
   </div>
   <div id="groups"></div>
   <div class="bar"><button id="rvb" type="button">Suriin ang boto</button></div>
 </section>
 <section id="receipt" hidden><div class="card white">
-  <div class="ic ok" aria-hidden="true"></div>
   <h1>Naitala na ang boto mo</h1>
   <p>I-save ang resibo sa phone bago umalis sa pahinang ito.</p>
   <img id="rimg" alt="Resibo ng boto">
-  <p id="rcode"><span>Receipt code</span><b id="rcodev"></b></p>
+  <p id="rcode">Receipt code: <b id="rcodev"></b></p>
   <button id="sv" type="button">I-save sa phone</button>
   <p id="rhelp">Hindi lumabas ang save? Mag-screenshot sa phone, o pindutin nang matagal ang larawan.</p>
   <button class="alt" id="done" type="button">Tapos na</button>
 </div></section>
 </main>
 <dialog id="dlg" aria-labelledby="dlgt">
-  <h2 id="dlgt">Tingnan muna ang boto mo</h2>
+  <h2 id="dlgt">Kumpirmahin ang boto</h2>
   <div class="rv" id="rv"></div>
   <p class="warn">Hindi na mababago ang boto kapag naisumite na.</p>
   <div class="err" id="derr" role="alert"></div>
-  <div class="col"><button id="dyes" type="button">Isumite ang boto</button><button class="alt" id="dno" type="button">Bumalik at baguhin</button></div>
+  <div class="row"><button class="alt" id="dno" type="button">Bumalik</button><button id="dyes" type="button">Isumite</button></div>
+</dialog>
+<dialog id="scn" aria-labelledby="scnt">
+  <h2 id="scnt">I-scan ang QR code</h2>
+  <div class="vid" id="scs"><video id="scv" playsinline muted></video><i class="frame"></i></div>
+  <p id="scm">Itapat ang QR code sa loob ng kahon. Kusa itong mababasa.</p>
+  <div class="err" id="sce" role="alert"></div>
+  <input type="file" id="scf" accept="image/*" capture="environment" hidden>
+  <button class="alt" id="scp" type="button">Kunan ng litrato ang QR</button>
+  <button class="alt" id="scx" type="button">Kanselahin</button>
 </dialog>
 <div id="toast" role="status" hidden></div>
 <script src="logic.js"></script>
+<script src="scan.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

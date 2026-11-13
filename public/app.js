@@ -1,7 +1,8 @@
 /*
  * eBallot SACDECO - Representative election, mobile voting: the page.
  *
- * Flow: Account Code -> POST /auth/voter-verify -> ballot (rules) -> candidates, one page at a time, per position, with search ->
+ * Flow: Account Code (typed, or read from the Registration QR code by scan.js) -> POST /auth/voter-verify -> instructions ("Bago ka bumoto") ->
+ * ballot (rules) -> candidates, one page at a time, per position, with search ->
  * review -> POST /representative-votes (the same receipt code is sent again after a lost answer, so the ballot can never count twice) -> receipt picture.
  * What is allowed and what to tell the voter is decided in logic.js (tested on its own); this file draws the screens and talks to the Worker.
  * Everything that comes from the server is put on the page as text, never as markup.
@@ -30,7 +31,7 @@
   }
 
   let S = null;              // the voter's session: from a successful sign-in until home()
-  let cur = 'home';          // the screen: home | result | ballot | receipt
+  let cur = 'home';          // the screen: home | result | guide | ballot | receipt
   let busy = false;          // a sign-in or a submit is on its way
   let countdown = null;
   let toastTimer = null;
@@ -107,7 +108,7 @@
   function show(id) {
     clearInterval(countdown);
     cur = id;
-    for (const s of ['home', 'result', 'ballot', 'receipt']) $('#' + s).hidden = s !== id;
+    for (const s of ['home', 'result', 'guide', 'ballot', 'receipt']) $('#' + s).hidden = s !== id;
     scrollTo(0, 0);
   }
 
@@ -146,10 +147,12 @@
     $('#rv').replaceChildren();
     $('#rimg').removeAttribute('src');
     popGuard();
+    if (window.QrScan) QrScan.close();
     show('home');
     $('#code').value = '';
     $('#herr').textContent = '';
     $('#vb').disabled = false;
+    $('#scanb').disabled = false;
     $('#vb').textContent = 'I-verify';
   }
 
@@ -214,6 +217,7 @@
     busy = true;
     const b = $('#vb');
     b.disabled = true;
+    $('#scanb').disabled = true;
     b.textContent = 'Bine-verify…';
     $('#herr').textContent = '';
     try {
@@ -222,11 +226,26 @@
       await openBallot(v, code);
     } catch (e) {
       b.disabled = false;
+      $('#scanb').disabled = false;
       b.textContent = 'I-verify';
       verifyFailed(e || {});
     } finally {
       busy = false;
     }
+  });
+
+  /** "I-scan ang QR code": the Registration QR holds only the Account Code; it is filled in and verified as if it had been typed (scan.js). */
+  $('#scanb').addEventListener('click', () => {
+    if (busy || !window.QrScan) return;
+    $('#herr').textContent = '';
+    QrScan.open({
+      onCode: code => {
+        $('#code').value = code;
+        const f = $('#vf');
+        if (f.requestSubmit) f.requestSubmit();
+        else f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      },
+    });
   });
 
   function verifyFailed(e) {
@@ -265,12 +284,28 @@
     $('#qc').hidden = true;
     pickButton(false);
     buildGroups();
-    show('ballot');
+    $('#gn').textContent = v.member.name;
+    $('#ge').textContent = v.event.title;
+    $('#gi').textContent = (v.member.name || '?').trim().charAt(0).toUpperCase();
+    $('#gck').checked = false;
+    $('#gb').disabled = true;
+    $('#gs').scrollTop = 0;
+    show('guide');
     pushGuard();
     paint();
+    for (const g of S.groups) loadMore(g);          // the first names are fetched while the voter reads the instructions
+  }
+
+  /* ---------------------------------------------------------------- instructions ("Bago ka bumoto") */
+
+  $('#gck').addEventListener('change', ev => { $('#gb').disabled = !ev.target.checked; });
+  $('#gb').addEventListener('click', () => {
+    if (!S || !$('#gck').checked) return;
+    show('ballot');
     syncHead();
     schedulePump();
-  }
+  });
+  $('#gback').addEventListener('click', home);
 
   /* ---------------------------------------------------------------- the ballot */
 
@@ -307,7 +342,7 @@
     const pick = h('button', { type: 'button', class: 'pick', role: 'checkbox', 'aria-checked': String(on), 'data-act': 'pick' },
       h('span', { class: 'bub' }),
       c.hasPhoto ? avatarEl(c) : null,
-      h('span', { class: 'who' }, c.candidateName, no ? h('span', { class: 'no' }, no) : null));
+      h('span', { class: 'nm' }, c.candidateName, no ? h('span', { class: 'no' }, no) : null));
     const more = details.length
       ? h('button', { type: 'button', class: 'more', 'aria-expanded': 'false', 'aria-label': 'Tingnan ang detalye ni ' + c.candidateName, 'data-act': 'info' }, 'Tingnan ang detalye')
       : null;
@@ -658,7 +693,7 @@
     busy = on;
     $('#dyes').disabled = on;
     $('#dno').disabled = on;
-    $('#dyes').textContent = on ? label : 'Isumite ang boto';
+    $('#dyes').textContent = on ? label : 'Isumite';
   }
 
   $('#dno').addEventListener('click', () => { if (!busy) $('#dlg').close(); });
@@ -717,7 +752,7 @@
           return;
         }
         if (S !== s) return;
-        if (!r || typeof r.receiptCode !== 'string') { fail('Hindi malinaw ang sagot ng server. Pindutin ulit ang “Isumite ang boto” - ligtas ito.'); return; }
+        if (!r || typeof r.receiptCode !== 'string') { fail('Hindi malinaw ang sagot ng server. Pindutin ulit ang “Isumite” - ligtas ito.'); return; }
         s.token = '';                                              // the ballot is in: the session is not needed any more
         s.code = '';
         setBusy(false);
@@ -726,7 +761,7 @@
         return;
       }
     } catch {
-      if (S === s) fail('Hindi naisumite. Pindutin ulit ang “Isumite ang boto” - ligtas ito.');
+      if (S === s) fail('Hindi naisumite. Pindutin ulit ang “Isumite” - ligtas ito.');
     }
   }
 
@@ -755,7 +790,7 @@
     try {
       const sample = [s.event.title, s.member.name, ...s.sel.values()].map(c => (typeof c === 'string' ? c : c.candidateName + c.position)).join(' ');
       if (document.fonts && document.fonts.load) {
-        await Promise.all([document.fonts.load('700 18px "Atkinson Hyperlegible"', sample), document.fonts.load('400 17px "Atkinson Hyperlegible"', sample)]).catch(() => {});
+        await Promise.all([document.fonts.load('700 18px "Inter"', sample), document.fonts.load('400 14px "Inter"', sample)]).catch(() => {});
       }
       const logo = await loadImage('logo.webp');
       const cv = drawReceipt(s, r, logo);
@@ -776,7 +811,7 @@
     const INK = '#16251B';
     const MUTE = '#5D6B61';
     const GREEN = '#1F7A33';
-    const F = '"Atkinson Hyperlegible",system-ui,sans-serif';
+    const F = '"Inter",system-ui,sans-serif';
     const lw = 190;
     const lh = logo ? Math.round(lw * logo.height / logo.width) : 0;
 
@@ -823,32 +858,32 @@
         font(700, 20, '#fff'); x.textAlign = 'center'; x.fillText('Resibo ng Boto', W / 2, by + 12);
       }
       y = by + 66;
-      T(s.event.title, 700, 19, INK, 0, 'center');
-      T(whenText(r.votedAt), 400, 16, MUTE, 0, 'center');
+      T(s.event.title, 700, 18, INK, 0, 'center');
+      T(whenText(r.votedAt), 400, 14, MUTE, 0, 'center');
       dash();
-      T('Member', 400, 15, MUTE);
-      T(s.member.name, 700, 19, INK);
-      T('Account Code: ' + s.member.accountCode, 400, 16, MUTE);
+      T('Member', 400, 13, MUTE);
+      T(s.member.name, 700, 18, INK);
+      T('Account Code: ' + s.member.accountCode, 400, 14, MUTE);
       dash();
       for (const g of s.groups) {
         const picked = ordered(L.pickedOf(s.sel, g));
         if (!picked.length) continue;
-        T(g.name, 700, 17, GREEN);
+        T(g.name, 700, 15, GREEN);
         for (const c of picked) {
-          if (draw) { x.fillStyle = INK; x.beginPath(); x.ellipse(P + 10, y + 12, 9, 6, 0, 0, 7); x.fill(); }
-          T(c.ballotNumber != null ? `${c.candidateName} (No. ${c.ballotNumber})` : c.candidateName, 400, 19, INK, 28);
+          if (draw) { x.fillStyle = INK; x.beginPath(); x.ellipse(P + 10, y + 11, 9, 6, 0, 0, 7); x.fill(); }
+          T(c.ballotNumber != null ? `${c.candidateName} (No. ${c.ballotNumber})` : c.candidateName, 400, 17, INK, 28);
         }
         y += 8;
       }
-      T(`Kabuuang napili: ${s.sel.size}`, 400, 16, MUTE, 0, 'center');
+      T(`Kabuuang napili: ${s.sel.size}`, 400, 14, MUTE, 0, 'center');
       dash();
-      T('Receipt code', 400, 15, MUTE, 0, 'center');
+      T('Receipt code', 400, 13, MUTE, 0, 'center');
       let size = 26;                                                // the code is one unbroken word: shrink it until it fits the line
       font(700, size, INK);
       while (size > 14 && x.measureText(r.receiptCode).width > W - 2 * P) { size--; font(700, size, INK); }
       T(r.receiptCode, 700, size, INK, 0, 'center');
       y += 4;
-      T('Itago ang resibong ito bilang patunay na naitala ang boto mo.', 400, 14, MUTE, 0, 'center');
+      T('Itago ang resibong ito bilang patunay na naitala ang boto mo.', 400, 12, MUTE, 0, 'center');
       y += P;
       return Math.ceil(y);
     };
