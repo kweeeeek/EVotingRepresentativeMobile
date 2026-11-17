@@ -46,6 +46,7 @@ function fakeApi(t, handler = () => undefined) {
     const r = route(call);
     if (r === 'POST /auth/kiosk-login') return J(200, { accessToken: KIOSK_TOKEN, expiresIn: 28800, role: 'Kiosk' });
     if (r === 'POST /auth/voter-verify') return J(200, VERIFY_OK);
+    if (r === 'GET /events/current') return J(200, { eventId: 7, eventType: 'REPRESENTATIVE', status: 'Opened' });
     if (/^GET \/events\/\d+\/representative-ballot$/.test(r)) return J(200, BALLOT);
     if (/^GET \/events\/\d+\/representative-candidates$/.test(r)) return J(200, PAGE);
     if (/^GET \/events\/\d+\/representative-candidates\/\d+\/photo$/.test(r)) return new Response(PNG, { status: 200, headers: { 'Content-Type': 'image/png' } });
@@ -184,10 +185,11 @@ test('verify: signs the kiosk in with the secret and id, asks the API, and hands
   assert.equal(j.event.eventType, 'REPRESENTATIVE');
   assert.equal(j.member.accountCode, '0001234');
   assert.ok(j.accessToken);
-  assert.deepEqual(calls.map(route), ['POST /auth/kiosk-login', 'POST /auth/voter-verify']);
+  assert.deepEqual(calls.map(route), ['POST /auth/kiosk-login', 'GET /events/current', 'POST /auth/voter-verify']);
   assert.deepEqual(calls[0].body, { kioskId: 'MOBILE-REP-KIOSK-01', deviceSecret: SECRET });
   assert.equal(calls[1].headers.get('Authorization'), 'Bearer ' + KIOSK_TOKEN);
-  assert.deepEqual(calls[1].body, { accountCode: '0001234' });
+  assert.equal(calls[2].headers.get('Authorization'), 'Bearer ' + KIOSK_TOKEN);
+  assert.deepEqual(calls[2].body, { accountCode: '0001234' });
   assert.equal(r.headers.get('Cache-Control'), 'no-store');
 });
 
@@ -268,7 +270,53 @@ test('verify: a kiosk token the API no longer accepts is replaced once, then the
   const w = await freshWorker();
   const r = await ask(w, makeEnv(), 'POST', '/api/v1/auth/voter-verify', { body: { accountCode: 'A1' } });
   assert.equal(r.status, 200);
-  assert.deepEqual(calls.map(route), ['POST /auth/kiosk-login', 'POST /auth/voter-verify', 'POST /auth/kiosk-login', 'POST /auth/voter-verify']);
+  // the open election's type is asked once and kept, so the retry goes straight to voter-verify
+  assert.deepEqual(calls.map(route), ['POST /auth/kiosk-login', 'GET /events/current', 'POST /auth/voter-verify', 'POST /auth/kiosk-login', 'POST /auth/voter-verify']);
+});
+
+test('verify: a General Assembly that is open now is named BEFORE the member is looked up (no "already voted")', async t => {
+  const calls = fakeApi(t, call => {
+    if (route(call) === 'GET /events/current') return J(200, { eventId: 3, eventType: 'GENERAL_ASSEMBLY', status: 'Opened' });
+    if (route(call) === 'POST /auth/voter-verify') return J(409, { error: 'Member has already voted in this election.' });
+    return undefined;
+  });
+  const w = await freshWorker();
+  const r = await ask(w, makeEnv(), 'POST', '/api/v1/auth/voter-verify', { body: { accountCode: 'A1' } });
+  assert.equal(r.status, 409);
+  assert.equal(r.json_().code, 'WRONG_EVENT_TYPE');
+  assert.equal(r.json_().eventType, 'GENERAL_ASSEMBLY');
+  assert.ok(!calls.some(c => route(c) === 'POST /auth/voter-verify'), 'the member is not looked up');
+});
+
+test('verify: no election open, or the type cannot be read: voter-verify answers as before (and the check after it still applies)', async t => {
+  for (const current of [J(404, { error: 'No election event is currently open.' }), J(500, {}), 'throw']) {
+    const calls = fakeApi(t, call => {
+      if (route(call) === 'GET /events/current') { if (current === 'throw') throw new TypeError('network'); return current.clone(); }
+      if (route(call) === 'POST /auth/voter-verify') return J(200, { ...VERIFY_OK, event: { ...VERIFY_OK.event, eventType: 'GENERAL_ASSEMBLY' } });
+      return undefined;
+    });
+    const w = await freshWorker();
+    const r = await ask(w, makeEnv(), 'POST', '/api/v1/auth/voter-verify', { body: { accountCode: 'A1' } });
+    assert.ok(calls.some(c => route(c) === 'POST /auth/voter-verify'));
+    assert.equal(r.status, 409);
+    assert.equal(r.json_().code, 'WRONG_EVENT_TYPE');
+    assert.ok(!r.text_.includes('accessToken'), 'no voter token for another type of election');
+  }
+});
+
+test('verify: twenty voters arriving at once ask for the open election once, and the answer is kept 15 s', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  const calls = fakeApi(t);
+  const w = await freshWorker();
+  const env = makeEnv();
+  await Promise.all(Array.from({ length: 20 }, (_, i) => ask(w, env, 'POST', '/api/v1/auth/voter-verify', { body: { accountCode: 'C' + i } })));
+  assert.equal(calls.filter(c => route(c) === 'GET /events/current').length, 1);
+  t.mock.timers.tick(14 * 1000);
+  await ask(w, env, 'POST', '/api/v1/auth/voter-verify', { body: { accountCode: 'later' } });
+  assert.equal(calls.filter(c => route(c) === 'GET /events/current').length, 1);
+  t.mock.timers.tick(2 * 1000);
+  await ask(w, env, 'POST', '/api/v1/auth/voter-verify', { body: { accountCode: 'later2' } });
+  assert.equal(calls.filter(c => route(c) === 'GET /events/current').length, 2);
 });
 
 test('verify: when the API keeps refusing the kiosk, the page is told KIOSK_REFUSED (and nothing loops)', async t => {
@@ -277,7 +325,8 @@ test('verify: when the API keeps refusing the kiosk, the page is told KIOSK_REFU
   const r = await ask(w, makeEnv(), 'POST', '/api/v1/auth/voter-verify', { body: { accountCode: 'A1' } });
   assert.equal(r.status, 401);
   assert.equal(r.json_().code, 'KIOSK_REFUSED');
-  assert.equal(calls.length, 4);
+  // sign-in, open-election type, verify (401), sign-in again, verify (401) - and no third round
+  assert.equal(calls.length, 5);
 });
 
 test('verify: a refused kiosk sign-in (wrong KIOSK_SECRET) is KIOSK_REFUSED and the secret is not echoed', async t => {

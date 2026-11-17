@@ -294,6 +294,37 @@ function verifyFailure(status, data, headers) {
   return relayFailure(status, d, headers);
 }
 
+/*
+ * The type of the election that is open, asked BEFORE the member is looked up. Without it a member who already voted in a
+ * General Assembly that is open now was told "you already voted" here, instead of "this page is for the Representative
+ * election". Kept for 15 s per Worker instance (the API caches events/current too), so a burst of voters is one call.
+ * Answers: a type string, 'NONE' (no election open), 'UNAUTHORIZED' (the kiosk token was refused) or null (unknown: the
+ * check after voter-verify still applies).
+ */
+const OPEN_TYPE_TTL_MS = 15_000;
+let openType = { value: null, at: 0 };
+let openTypeInFlight = null;
+async function openEventType(env, token) {
+  if (openType.at && Date.now() - openType.at < OPEN_TYPE_TTL_MS) return openType.value;
+  if (openTypeInFlight) return openTypeInFlight;          // voters arriving together share one question
+  const p = askOpenEventType(env, token);
+  openTypeInFlight = p;
+  try { return await p; } finally { if (openTypeInFlight === p) openTypeInFlight = null; }
+}
+async function askOpenEventType(env, token) {
+  let r;
+  try { r = await up(env, '/events/current', { headers: { Authorization: 'Bearer ' + token } }); } catch { return null; }
+  if (r.status === 401) return 'UNAUTHORIZED';
+  let value = null;
+  if (r.status === 404) value = 'NONE';
+  else if (r.ok) {
+    const data = await readJsonBody(r);
+    value = data && typeof data.eventType === 'string' ? data.eventType : null;
+  }
+  if (value) openType = { value, at: Date.now() };
+  return value;
+}
+
 async function verify(request, env) {
   let body;
   try { body = await readJsonRequest(request); } catch (e) { return bodyProblem(e) || problem(400, 'Bad request.', 'VALIDATION'); }
@@ -306,6 +337,17 @@ async function verify(request, env) {
       if (e instanceof CredentialsRefused) return problem(401, 'The server did not accept the kiosk credentials of this page.', 'KIOSK_REFUSED');
       return unreachable();
     }
+
+    // Another type of election is open: say so before anything about the member (not "already voted", not "not found").
+    const open = await openEventType(env, token);
+    if (open === 'UNAUTHORIZED') {
+      if (pass === 0) continue;
+      return problem(401, 'The server did not accept the kiosk credentials of this page.', 'KIOSK_REFUSED');
+    }
+    if (open && open !== 'NONE' && open !== 'REPRESENTATIVE') {
+      return problem(409, 'The election that is open now is not a Representative election.', 'WRONG_EVENT_TYPE', undefined, { eventType: open });
+    }
+
     let r;
     try {
       r = await up(env, '/auth/voter-verify', {
